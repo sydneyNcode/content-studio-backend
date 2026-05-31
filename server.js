@@ -239,6 +239,38 @@ app.post('/webhook', async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+  // CREATE CHECKOUT SESSION
+app.post('/create-checkout-session', async (req, res) => {
+  const { email, priceId } = req.body;
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      customer_email: email,
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: 'subscription',
+      success_url: 'https://contentstudioai.app/dashboard?upgraded=true',
+      cancel_url: 'https://contentstudioai.app/profile',
+    });
+    res.json({ url: session.url });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// STRIPE WEBHOOK
+app.post('/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const email = session.customer_email;
