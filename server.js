@@ -8,13 +8,13 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const ADMIN_EMAIL = 'const ADMIN_EMAIL = 'sydney@contentstudioai.app';';
+const ADMIN_EMAIL = 'sydney@contentstudioai.app';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-app.use(cors());
 app.use('/webhook', express.raw({ type: 'application/json' }));
+app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {
@@ -23,19 +23,18 @@ app.get('/', (req, res) => {
 
 app.post('/signup', async (req, res) => {
   try {
-    const { email, password, name, username, niche, tone, bio } = req.body;
+    const { email, password, name, first_name, last_name, username, niche, tone, bio } = req.body;
     if (!email || !password || !name || !username) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     const { data: existing } = await supabase.from('users').select('email').eq('email', email).single();
     if (existing) return res.status(400).json({ error: 'Email already registered' });
-    
-    // Admin gets Pro automatically
+
     const userTier = email === ADMIN_EMAIL ? 'pro' : 'free';
-    
+
     const { data, error } = await supabase
       .from('users')
-      .insert([{ email, password, name, username, niche, tone, bio, tier: userTier }])
+      .insert([{ email, password, name, first_name, last_name, username, niche, tone, bio, tier: userTier }])
       .select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.status(201).json({ message: 'User created!', user: data });
@@ -51,13 +50,12 @@ app.post('/login', async (req, res) => {
     if (error || !user || user.password !== password) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
-    // Make sure admin always has pro tier
+
     if (user.email === ADMIN_EMAIL && user.tier !== 'pro') {
       await supabase.from('users').update({ tier: 'pro' }).eq('email', ADMIN_EMAIL);
       user.tier = 'pro';
     }
-    
+
     res.json({ message: 'Login successful', user });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -78,7 +76,6 @@ app.post('/chat', async (req, res) => {
     const isAdmin = user.email === ADMIN_EMAIL;
     const isPro = user.tier === 'pro' || isAdmin;
 
-    // Check daily limit (skipped for admin and pro)
     const today = new Date().toISOString().split('T')[0];
     if (!isPro) {
       if (user.last_chat_date === today && (user.chat_count_today || 0) >= 3) {
@@ -89,7 +86,6 @@ app.post('/chat', async (req, res) => {
       }
     }
 
-    // CRIMSON'S FULL BRAIN — THE REAL SYSTEM PROMPT
     const systemPrompt = `You are Crimson — the creative partner every content creator wishes they had. You're not a chatbot. You're a warm, brilliant, opinionated coach who shows up every single day ready to help ${user.name} build something real.
 
 WHO YOU'RE TALKING TO:
@@ -149,7 +145,6 @@ CONTENT STRATEGY YOU KNOW COLD:
 GOLDEN RULES — NEVER BREAK THESE:
 Never ignore what you know about the user. Never give the same advice you'd give anyone else. Never talk down to experienced creators. Never give a 10-step list when 2 steps will do. Never say "post consistently" without explaining what that looks like for THEM specifically. Never sound like a chatbot. Always feel like Crimson.`;
 
-    // SMART MODEL FALLBACK: Sonnet → Haiku
     let response;
     let modelUsed = 'sonnet';
     const models = [
@@ -192,7 +187,6 @@ Never ignore what you know about the user. Never give the same advice you'd give
 
     const reply = response.content[0].text;
 
-    // Update chat count (skip for admin/pro — no limits)
     if (!isPro) {
       const newCount = (user.last_chat_date === today) ? (user.chat_count_today || 0) + 1 : 1;
       await supabase.from('users').update({ chat_count_today: newCount, last_chat_date: today }).eq('id', userId);
@@ -208,38 +202,6 @@ Never ignore what you know about the user. Never give the same advice you'd give
 });
 
 // CREATE CHECKOUT SESSION
-app.post('/create-checkout-session', async (req, res) => {
-  const { email, priceId } = req.body;
-  try {
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      customer_email: email,
-      line_items: [{ price: priceId, quantity: 1 }],
-      mode: 'subscription',
-      success_url: 'https://contentstudioai.app/dashboard?upgraded=true',
-      cancel_url: 'https://contentstudioai.app/profile',
-    });
-    res.json({ url: session.url });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// STRIPE WEBHOOK
-app.post('/webhook', async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-  try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  // CREATE CHECKOUT SESSION
 app.post('/create-checkout-session', async (req, res) => {
   const { email, priceId } = req.body;
   try {
