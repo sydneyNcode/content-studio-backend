@@ -4,18 +4,176 @@ require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { Resend } = require('resend');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 const ADMIN_EMAIL = 'sydney@contentstudioai.app';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use(cors());
 app.use(express.json());
+
+// ============================================================
+// EMAIL TEMPLATES — edit these to customize your emails!
+// ============================================================
+
+async function sendWelcomeEmail(user) {
+  const firstName = user.first_name || user.name?.split(' ')[0] || 'Creator';
+  try {
+    const { data, error } = await resend.emails.send({
+      from: process.env.RESEND_FROM,
+      to: user.email,
+      subject: `Welcome to Content Studio AI, ${firstName}! 🌹`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+        <body style="margin:0;padding:0;background:#FAF8F5;font-family:'Helvetica Neue',Arial,sans-serif;">
+          <div style="max-width:560px;margin:0 auto;padding:48px 24px;">
+
+            <div style="text-align:center;margin-bottom:36px;">
+              <h1 style="font-family:Georgia,serif;font-size:30px;color:#8B1538;font-weight:400;letter-spacing:0.03em;margin:0;">
+                Content Studio AI
+              </h1>
+              <p style="color:#A89E96;font-size:13px;margin:6px 0 0;letter-spacing:0.05em;">YOUR CREATIVE COMMAND CENTER</p>
+            </div>
+
+            <div style="background:#ffffff;border-radius:20px;padding:40px;border:1px solid #EDE8E3;margin-bottom:16px;">
+              <h2 style="font-family:Georgia,serif;font-size:26px;color:#1A1008;font-weight:400;margin:0 0 8px;">
+                You made it, ${firstName}. 🌹
+              </h2>
+              <p style="color:#A89E96;font-size:13px;font-style:italic;margin:0 0 24px;">
+                We've been waiting for you.
+              </p>
+              <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 20px;">
+                Content Studio AI is your creative space — built specifically for creators who are serious about growing. No fluff, no overwhelm. Just powerful tools and a partner who gets it.
+              </p>
+              <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 28px;">
+                Meet <strong style="color:#8B1538;">Crimson</strong> — your personal AI content coach. She already knows your niche is <strong style="color:#1A1008;">${user.niche || 'content creation'}</strong> and she's ready to help you create content that actually works.
+              </p>
+
+              <div style="background:#FAF8F5;border-radius:12px;padding:20px 24px;margin:0 0 32px;border-left:3px solid #8B1538;">
+                <p style="color:#8B1538;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 12px;">Start here</p>
+                <p style="color:#6B6058;font-size:14px;margin:0 0 8px;">✦ Chat with Crimson — she's waiting for your first question</p>
+                <p style="color:#6B6058;font-size:14px;margin:0 0 8px;">✦ Check the Library for templates and hooks</p>
+                <p style="color:#6B6058;font-size:14px;margin:0;">✦ Explore the Lounge — your community is here</p>
+              </div>
+
+              <div style="text-align:center;">
+                <a href="https://contentstudioai.app/crimson" style="display:inline-block;background:#8B1538;color:#FAF8F5;text-decoration:none;padding:16px 36px;border-radius:50px;font-size:14px;font-weight:500;letter-spacing:0.02em;">
+                  Meet Crimson →
+                </a>
+              </div>
+            </div>
+
+            <div style="background:#ffffff;border-radius:20px;padding:28px 32px;border:1px solid #EDE8E3;margin-bottom:16px;">
+              <p style="color:#8B1538;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 16px;">Your account</p>
+              <table style="width:100%">
+                <tr>
+                  <td style="color:#A89E96;font-size:13px;padding:6px 0;">Name</td>
+                  <td style="color:#1A1008;font-size:13px;text-align:right;">${firstName}</td>
+                </tr>
+                <tr>
+                  <td style="color:#A89E96;font-size:13px;padding:6px 0;border-top:1px solid #F5F0EB;">Niche</td>
+                  <td style="color:#1A1008;font-size:13px;text-align:right;border-top:1px solid #F5F0EB;">${user.niche || 'Content Creation'}</td>
+                </tr>
+                <tr>
+                  <td style="color:#A89E96;font-size:13px;padding:6px 0;border-top:1px solid #F5F0EB;">Plan</td>
+                  <td style="color:#8B1538;font-size:13px;font-weight:500;text-align:right;border-top:1px solid #F5F0EB;">${user.tier === 'pro' ? '✦ Pro Member' : 'Starter (Free)'}</td>
+                </tr>
+              </table>
+            </div>
+
+            <p style="text-align:center;color:#A89E96;font-size:12px;line-height:1.8;margin-top:24px;">
+              Content Studio AI · <a href="https://contentstudioai.app" style="color:#8B1538;text-decoration:none;">contentstudioai.app</a><br>
+              Questions? Reply to this email or reach us at <a href="mailto:sydney@contentstudioai.app" style="color:#8B1538;">sydney@contentstudioai.app</a>
+            </p>
+
+          </div>
+        </body>
+        </html>
+      `
+    });
+    if (error) console.error('Welcome email error:', error);
+    else console.log('Welcome email sent to:', user.email);
+  } catch (err) {
+    console.error('Welcome email exception:', err);
+  }
+}
+
+async function sendUpgradeEmail(email, firstName) {
+  try {
+    const { data, error } = await resend.emails.send({
+      from: process.env.RESEND_FROM,
+      to: email,
+      subject: 'You\'re officially Pro ✦',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+        <body style="margin:0;padding:0;background:#FAF8F5;font-family:'Helvetica Neue',Arial,sans-serif;">
+          <div style="max-width:560px;margin:0 auto;padding:48px 24px;">
+
+            <div style="text-align:center;margin-bottom:36px;">
+              <h1 style="font-family:Georgia,serif;font-size:30px;color:#8B1538;font-weight:400;letter-spacing:0.03em;margin:0;">
+                Content Studio AI
+              </h1>
+            </div>
+
+            <div style="background:#8B1538;border-radius:20px;padding:44px 40px;text-align:center;margin-bottom:16px;">
+              <p style="color:rgba(250,248,245,0.7);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.14em;margin:0 0 16px;">You're in</p>
+              <h2 style="font-family:Georgia,serif;font-size:32px;color:#FAF8F5;font-weight:400;margin:0 0 20px;">
+                Welcome to Pro, ${firstName}. ✦
+              </h2>
+              <p style="color:rgba(250,248,245,0.75);font-size:15px;line-height:1.8;margin:0 0 32px;">
+                The full Content Studio AI experience is now yours. Unlimited Crimson, all resources, and everything we build next — you're part of it from the beginning.
+              </p>
+              <a href="https://contentstudioai.app/crimson" style="display:inline-block;background:#FAF8F5;color:#8B1538;text-decoration:none;padding:16px 36px;border-radius:50px;font-size:14px;font-weight:600;">
+                Start Creating →
+              </a>
+            </div>
+
+            <div style="background:#ffffff;border-radius:20px;padding:32px;border:1px solid #EDE8E3;margin-bottom:16px;">
+              <p style="color:#8B1538;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 20px;">Everything that's now yours</p>
+              ${[
+                'Unlimited Crimson AI — no daily limits, ever',
+                'All current and future courses',
+                'Premium templates and hooks library',
+                'Priority community access',
+                'Power Hour group coaching calls'
+              ].map(f => `
+                <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;">
+                  <span style="color:#8B1538;font-size:16px;line-height:1.4;">✦</span>
+                  <p style="color:#6B6058;font-size:14px;line-height:1.6;margin:0;">${f}</p>
+                </div>
+              `).join('')}
+            </div>
+
+            <p style="text-align:center;color:#A89E96;font-size:12px;line-height:1.8;margin-top:24px;">
+              Content Studio AI · <a href="https://contentstudioai.app" style="color:#8B1538;text-decoration:none;">contentstudioai.app</a><br>
+              Questions? <a href="mailto:sydney@contentstudioai.app" style="color:#8B1538;">sydney@contentstudioai.app</a>
+            </p>
+
+          </div>
+        </body>
+        </html>
+      `
+    });
+    if (error) console.error('Upgrade email error:', error);
+    else console.log('Upgrade email sent to:', email);
+  } catch (err) {
+    console.error('Upgrade email exception:', err);
+  }
+}
+
+// ============================================================
+// ROUTES
+// ============================================================
 
 app.get('/', (req, res) => {
   res.json({ message: 'Content Studio AI Backend — Running! 🌹' });
@@ -37,6 +195,8 @@ app.post('/signup', async (req, res) => {
       .insert([{ email, password, name, first_name, last_name, username, niche, tone, bio, tier: userTier }])
       .select().single();
     if (error) return res.status(500).json({ error: error.message });
+
+    sendWelcomeEmail(data);
     res.status(201).json({ message: 'User created!', user: data });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -51,8 +211,16 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    if (user.status === 'suspended') {
+      return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' });
+    }
+
     if (user.email === ADMIN_EMAIL && user.tier !== 'pro') {
       await supabase.from('users').update({ tier: 'pro' }).eq('email', ADMIN_EMAIL);
+      user.tier = 'pro';
+    }
+
+    if (user.tier === 'founding') {
       user.tier = 'pro';
     }
 
@@ -62,7 +230,6 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// CRIMSON AI — FULL BRAIN
 app.post('/chat', async (req, res) => {
   try {
     const { userId, message } = req.body;
@@ -74,7 +241,7 @@ app.post('/chat', async (req, res) => {
     if (userError || !user) return res.status(404).json({ error: 'User not found' });
 
     const isAdmin = user.email === ADMIN_EMAIL;
-    const isPro = user.tier === 'pro' || isAdmin;
+    const isPro = user.tier === 'pro' || user.tier === 'founding' || isAdmin;
 
     const today = new Date().toISOString().split('T')[0];
     if (!isPro) {
@@ -124,10 +291,6 @@ Instagram: Reels get reach, carousels get saves, stories build intimacy. The alg
 
 YouTube: SEO-driven. Thumbnails and titles decide 80% of success. Retention curves matter — hooks in first 30 seconds. Long-form builds community, Shorts bring new eyes. Consistency over quantity for the algorithm.
 
-Pinterest: Search-based, evergreen traffic. Vertical pins, keyword-rich descriptions, consistent posting. Great for niches like lifestyle, food, DIY, fashion, travel. Slower burn but long-lasting reach.
-
-LinkedIn: Professional stories outperform promotional content. Personal wins and lessons > company announcements. Text-only posts often outperform images. Comments drive algorithm. Thought leadership and vulnerability = engagement.
-
 CONTENT STRATEGY YOU KNOW COLD:
 - Hook formulas that stop the scroll
 - Content batching and calendar planning
@@ -138,8 +301,6 @@ CONTENT STRATEGY YOU KNOW COLD:
 - The difference between reach content and relationship content
 - Brand voice development
 - Caption writing that drives action
-- Hashtag strategy (and when it doesn't matter)
-- Collaboration and creator partnerships
 - Monetization: brand deals, digital products, coaching, affiliate
 
 GOLDEN RULES — NEVER BREAK THESE:
@@ -201,7 +362,6 @@ Never ignore what you know about the user. Never give the same advice you'd give
   }
 });
 
-// CREATE CHECKOUT SESSION
 app.post('/create-checkout-session', async (req, res) => {
   const { email, priceId } = req.body;
   try {
@@ -219,7 +379,6 @@ app.post('/create-checkout-session', async (req, res) => {
   }
 });
 
-// STRIPE WEBHOOK
 app.post('/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -236,7 +395,10 @@ app.post('/webhook', async (req, res) => {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const email = session.customer_email;
-    await supabase.from('users').update({ tier: 'pro' }).eq('email', email);
+    const customerId = session.customer;
+    await supabase.from('users').update({ tier: 'pro', stripe_customer_id: customerId }).eq('email', email);
+    const { data: upgradedUser } = await supabase.from('users').select('name, first_name').eq('email', email).single();
+    sendUpgradeEmail(email, upgradedUser?.first_name || upgradedUser?.name || 'Creator');
   }
 
   res.json({ received: true });
