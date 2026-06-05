@@ -5,6 +5,7 @@ const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { Resend } = require('resend');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,7 +25,7 @@ async function sendWelcomeEmail(user) {
     const { error } = await resend.emails.send({
       from: process.env.RESEND_FROM,
       to: user.email,
-      subject: `Welcome to Content Studio AI, ${firstName}! 🌹`,
+      subject: `Welcome to Content Studio AI, ${firstName}!`,
       html: `<!DOCTYPE html>
         <html>
         <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -35,7 +36,7 @@ async function sendWelcomeEmail(user) {
               <p style="color:#A89E96;font-size:13px;margin:6px 0 0;letter-spacing:0.05em;">YOUR CREATIVE COMMAND CENTER</p>
             </div>
             <div style="background:#ffffff;border-radius:20px;padding:40px;border:1px solid #EDE8E3;margin-bottom:16px;">
-              <h2 style="font-family:Georgia,serif;font-size:26px;color:#1A1008;font-weight:400;margin:0 0 8px;">You made it, ${firstName}. 🌹</h2>
+              <h2 style="font-family:Georgia,serif;font-size:26px;color:#1A1008;font-weight:400;margin:0 0 8px;">You made it, ${firstName}.</h2>
               <p style="color:#A89E96;font-size:13px;font-style:italic;margin:0 0 24px;">We've been waiting for you.</p>
               <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 20px;">Content Studio AI is your creative space — built specifically for creators who are serious about growing.</p>
               <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 28px;">Meet <strong style="color:#8B1538;">Crimson</strong> — your personal AI content coach. She knows your niche is <strong style="color:#1A1008;">${user.niche || 'content creation'}</strong> and she's ready to help.</p>
@@ -97,6 +98,42 @@ async function sendUpgradeEmail(email, firstName) {
   }
 }
 
+async function sendPasswordResetEmail(email, resetUrl) {
+  try {
+    const { error } = await resend.emails.send({
+      from: process.env.RESEND_FROM,
+      to: email,
+      subject: 'Reset your password — Content Studio AI',
+      html: `<!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+        <body style="margin:0;padding:0;background:#FAF8F5;font-family:'Helvetica Neue',Arial,sans-serif;">
+          <div style="max-width:560px;margin:0 auto;padding:48px 24px;">
+            <div style="text-align:center;margin-bottom:36px;">
+              <h1 style="font-family:Georgia,serif;font-size:30px;color:#8B1538;font-weight:400;margin:0;">Content Studio AI</h1>
+            </div>
+            <div style="background:#ffffff;border-radius:20px;padding:40px;border:1px solid #EDE8E3;">
+              <h2 style="font-family:Georgia,serif;font-size:24px;color:#1A1008;font-weight:400;margin:0 0 16px;">Reset your password</h2>
+              <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 24px;">We received a request to reset your password. Click the button below — this link expires in 1 hour.</p>
+              <div style="text-align:center;margin:0 0 28px;">
+                <a href="${resetUrl}" style="display:inline-block;background:#8B1538;color:#FAF8F5;text-decoration:none;padding:16px 36px;border-radius:50px;font-size:14px;font-weight:500;">Reset Password →</a>
+              </div>
+              <p style="color:#A89E96;font-size:13px;line-height:1.6;margin:0;">If you didn't request this, you can safely ignore this email. Your password won't change.</p>
+            </div>
+            <p style="text-align:center;color:#A89E96;font-size:12px;margin-top:24px;">
+              Content Studio AI · <a href="https://contentstudioai.app" style="color:#8B1538;text-decoration:none;">contentstudioai.app</a>
+            </p>
+          </div>
+        </body>
+        </html>`
+    });
+    if (error) console.error('Reset email error:', error);
+    else console.log('Reset email sent to:', email);
+  } catch (err) {
+    console.error('Reset email exception:', err);
+  }
+}
+
 app.get('/', (req, res) => {
   res.json({ message: 'Content Studio AI Backend — Running! 🌹' });
 });
@@ -140,6 +177,56 @@ app.post('/login', async (req, res) => {
     }
     if (user.tier === 'founding') user.tier = 'pro';
     res.json({ message: 'Login successful', user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const { data: user } = await supabase.from('users').select('id, email').eq('email', email).single();
+    if (!user) {
+      return res.json({ message: 'If that email exists, a reset link has been sent.' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    await supabase.from('password_resets').insert([{ email, token, expires_at: expiresAt }]);
+
+    const resetUrl = `https://contentstudioai.app/reset-password?token=${token}`;
+    await sendPasswordResetEmail(email, resetUrl);
+
+    res.json({ message: 'If that email exists, a reset link has been sent.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token and password required' });
+
+    const { data: reset } = await supabase
+      .from('password_resets')
+      .select('*')
+      .eq('token', token)
+      .eq('used', false)
+      .single();
+
+    if (!reset) return res.status(400).json({ error: 'Invalid or expired reset link' });
+    if (new Date(reset.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'This reset link has expired. Please request a new one.' });
+    }
+
+    await supabase.from('users').update({ password }).eq('email', reset.email);
+    await supabase.from('password_resets').update({ used: true }).eq('token', token);
+
+    res.json({ message: 'Password updated successfully!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -195,48 +282,17 @@ HOW YOU TALK:
 - Occasionally use 🌹 as your signature, but sparingly
 - When analyzing images: be specific, actionable, and encouraging
 
-HOW YOU READ THE ROOM:
-- Newcomers: Warm, guiding energy. No overwhelm. One step at a time.
-- Growing creators: Direct and strategic. Give them the WHY.
-- Established creators: Peer-to-peer. Real talk about what's working.
-
 WHAT YOU KNOW DEEPLY:
-TikTok: Algorithm rewards watch time and completion rate above all. First 3 seconds are everything. Trending sounds boost reach but niche consistency builds loyalty. Hooks, POVs, story formats, duets, stitches.
-
-Instagram: Reels get reach, carousels get saves, stories build intimacy. Strong hook on slide 1. Captions matter more than people think. Collab posts and shares are gold.
-
-YouTube: SEO-driven. Thumbnails and titles decide 80% of success. Retention curves matter — hooks in first 30 seconds.
-
-CONTENT STRATEGY:
-- Hook formulas that stop the scroll
-- Content batching and calendar planning
-- Repurposing content across platforms
-- Growing from 0 to first 1K followers
-- Caption writing that drives action
-- Monetization: brand deals, digital products, coaching, affiliate
-
-WHEN ANALYZING IMAGES:
-- Be specific about what you see
-- Give actionable feedback on thumbnails, hooks, layouts, analytics
-- Connect insights to their specific niche and goals
-- Be encouraging but honest
+TikTok: Algorithm rewards watch time and completion rate above all. First 3 seconds are everything. Trending sounds boost reach but niche consistency builds loyalty.
+Instagram: Reels get reach, carousels get saves, stories build intimacy. Strong hook on slide 1. Captions matter more than people think.
+YouTube: SEO-driven. Thumbnails and titles decide 80% of success. Retention curves matter.
 
 GOLDEN RULES:
 Never ignore what you know about the user. Never give generic advice. Never sound like a chatbot. Always feel like Crimson.`;
 
     const userContent = imageBase64 ? [
-      {
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: imageType || 'image/jpeg',
-          data: imageBase64
-        }
-      },
-      {
-        type: 'text',
-        text: message || 'Please analyze this image and give me feedback as a content creator.'
-      }
+      { type: 'image', source: { type: 'base64', media_type: imageType || 'image/jpeg', data: imageBase64 } },
+      { type: 'text', text: message || 'Please analyze this image and give me feedback as a content creator.' }
     ] : message;
 
     let response;
@@ -274,9 +330,7 @@ Never ignore what you know about the user. Never give generic advice. Never soun
     }
 
     if (!response) {
-      return res.status(503).json({
-        error: "Crimson is taking a moment — she's in high demand right now! Try again in a few seconds. 🌹"
-      });
+      return res.status(503).json({ error: "Crimson is taking a moment — try again in a few seconds. 🌹" });
     }
 
     const reply = response.content[0].text;
