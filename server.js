@@ -134,6 +134,59 @@ async function sendPasswordResetEmail(email, resetUrl) {
   }
 }
 
+app.post('/join-waitlist', async (req, res) => {
+  try {
+    const { name, email, source } = req.body;
+    if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
+
+    const { data: existing } = await supabase.from('waitlist').select('email').eq('email', email).single();
+    if (existing) return res.status(400).json({ error: 'You are already on the waitlist!' });
+
+    const { data, error } = await supabase
+      .from('waitlist')
+      .insert([{ name, email, source: source || 'founding' }])
+      .select().single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    await resend.emails.send({
+      from: process.env.RESEND_FROM,
+      to: email,
+      subject: 'You\'re on the list! 🌹',
+      html: `<!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="margin:0;padding:0;background:#FAF8F5;font-family:'Helvetica Neue',Arial,sans-serif;">
+          <div style="max-width:560px;margin:0 auto;padding:48px 24px;">
+            <div style="text-align:center;margin-bottom:36px;">
+              <h1 style="font-family:Georgia,serif;font-size:30px;color:#8B1538;font-weight:400;margin:0;">Content Studio AI</h1>
+            </div>
+            <div style="background:#ffffff;border-radius:20px;padding:40px;border:1px solid #EDE8E3;">
+              <h2 style="font-family:Georgia,serif;font-size:26px;color:#1A1008;font-weight:400;margin:0 0 16px;">You're in, ${name}! 🌹</h2>
+              <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 20px;">
+                You've officially joined the Content Studio AI founding group. We're so glad you're here.
+              </p>
+              <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 28px;">
+                You'll be among the first to get access when we open the doors. Watch your inbox — we'll be in touch very soon with everything you need to get started.
+              </p>
+              <div style="background:#FAF8F5;border-radius:12px;padding:20px 24px;border-left:3px solid #8B1538;">
+                <p style="color:#8B1538;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 8px;">While you wait</p>
+                <p style="color:#6B6058;font-size:14px;margin:0 0 6px;">✦ Follow along on TikTok for behind the scenes</p>
+                <p style="color:#6B6058;font-size:14px;margin:0;">✦ Tell a creator friend — founding spots are limited</p>
+              </div>
+            </div>
+            <p style="text-align:center;color:#A89E96;font-size:12px;margin-top:24px;">
+              Content Studio AI · <a href="https://contentstudioai.app" style="color:#8B1538;text-decoration:none;">contentstudioai.app</a>
+            </p>
+          </div>
+        </body>
+        </html>`
+    });
+
+    res.status(201).json({ message: 'You\'re on the list!', data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.get('/', (req, res) => {
   res.json({ message: 'Content Studio AI Backend — Running! 🌹' });
 });
