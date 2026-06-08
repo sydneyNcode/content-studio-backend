@@ -6,6 +6,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { Resend } = require('resend');
 const crypto = require('crypto');
+const getFoundingEmail = require('./foundingEmail');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,22 +38,14 @@ async function sendWelcomeEmail(user) {
             </div>
             <div style="background:#ffffff;border-radius:20px;padding:40px;border:1px solid #EDE8E3;margin-bottom:16px;">
               <h2 style="font-family:Georgia,serif;font-size:26px;color:#1A1008;font-weight:400;margin:0 0 8px;">You made it, ${firstName}.</h2>
-              <p style="color:#A89E96;font-size:13px;font-style:italic;margin:0 0 24px;">We've been waiting for you.</p>
               <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 20px;">Content Studio AI is your creative space — built specifically for creators who are serious about growing.</p>
               <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 28px;">Meet <strong style="color:#8B1538;">Crimson</strong> — your personal AI content coach. She knows your niche is <strong style="color:#1A1008;">${user.niche || 'content creation'}</strong> and she's ready to help.</p>
-              <div style="background:#FAF8F5;border-radius:12px;padding:20px 24px;margin:0 0 32px;border-left:3px solid #8B1538;">
-                <p style="color:#8B1538;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 12px;">Start here</p>
-                <p style="color:#6B6058;font-size:14px;margin:0 0 8px;">✦ Chat with Crimson — she's waiting for your first question</p>
-                <p style="color:#6B6058;font-size:14px;margin:0 0 8px;">✦ Check the Library for templates and hooks</p>
-                <p style="color:#6B6058;font-size:14px;margin:0;">✦ Explore the Lounge — your community is here</p>
-              </div>
               <div style="text-align:center;">
                 <a href="https://contentstudioai.app/crimson" style="display:inline-block;background:#8B1538;color:#FAF8F5;text-decoration:none;padding:16px 36px;border-radius:50px;font-size:14px;font-weight:500;">Meet Crimson →</a>
               </div>
             </div>
             <p style="text-align:center;color:#A89E96;font-size:12px;line-height:1.8;margin-top:24px;">
-              Content Studio AI · <a href="https://contentstudioai.app" style="color:#8B1538;text-decoration:none;">contentstudioai.app</a><br>
-              Questions? <a href="mailto:sydney@contentstudioai.app" style="color:#8B1538;">sydney@contentstudioai.app</a>
+              Content Studio AI · <a href="https://contentstudioai.app" style="color:#8B1538;text-decoration:none;">contentstudioai.app</a>
             </p>
           </div>
         </body>
@@ -81,7 +74,7 @@ async function sendUpgradeEmail(email, firstName) {
             </div>
             <div style="background:#8B1538;border-radius:20px;padding:44px 40px;text-align:center;margin-bottom:16px;">
               <h2 style="font-family:Georgia,serif;font-size:32px;color:#FAF8F5;font-weight:400;margin:0 0 20px;">Welcome to Pro, ${firstName}. ✦</h2>
-              <p style="color:rgba(250,248,245,0.75);font-size:15px;line-height:1.8;margin:0 0 32px;">Unlimited Crimson, all resources, and everything we build next — it's all yours.</p>
+              <p style="color:rgba(250,248,245,0.75);font-size:15px;line-height:1.8;margin:0 0 32px;">Unlimited Crimson, all resources, and everything we build next.</p>
               <a href="https://contentstudioai.app/crimson" style="display:inline-block;background:#FAF8F5;color:#8B1538;text-decoration:none;padding:16px 36px;border-radius:50px;font-size:14px;font-weight:600;">Start Creating →</a>
             </div>
             <p style="text-align:center;color:#A89E96;font-size:12px;margin-top:24px;">
@@ -106,7 +99,7 @@ async function sendPasswordResetEmail(email, resetUrl) {
       subject: 'Reset your password — Content Studio AI',
       html: `<!DOCTYPE html>
         <html>
-        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+        <head><meta charset="utf-8"></head>
         <body style="margin:0;padding:0;background:#FAF8F5;font-family:'Helvetica Neue',Arial,sans-serif;">
           <div style="max-width:560px;margin:0 auto;padding:48px 24px;">
             <div style="text-align:center;margin-bottom:36px;">
@@ -114,15 +107,12 @@ async function sendPasswordResetEmail(email, resetUrl) {
             </div>
             <div style="background:#ffffff;border-radius:20px;padding:40px;border:1px solid #EDE8E3;">
               <h2 style="font-family:Georgia,serif;font-size:24px;color:#1A1008;font-weight:400;margin:0 0 16px;">Reset your password</h2>
-              <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 24px;">We received a request to reset your password. Click the button below — this link expires in 1 hour.</p>
+              <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 24px;">Click below — this link expires in 1 hour.</p>
               <div style="text-align:center;margin:0 0 28px;">
                 <a href="${resetUrl}" style="display:inline-block;background:#8B1538;color:#FAF8F5;text-decoration:none;padding:16px 36px;border-radius:50px;font-size:14px;font-weight:500;">Reset Password →</a>
               </div>
-              <p style="color:#A89E96;font-size:13px;line-height:1.6;margin:0;">If you didn't request this, you can safely ignore this email. Your password won't change.</p>
+              <p style="color:#A89E96;font-size:13px;">If you didn't request this, you can safely ignore this email.</p>
             </div>
-            <p style="text-align:center;color:#A89E96;font-size:12px;margin-top:24px;">
-              Content Studio AI · <a href="https://contentstudioai.app" style="color:#8B1538;text-decoration:none;">contentstudioai.app</a>
-            </p>
           </div>
         </body>
         </html>`
@@ -133,6 +123,10 @@ async function sendPasswordResetEmail(email, resetUrl) {
     console.error('Reset email exception:', err);
   }
 }
+
+app.get('/', (req, res) => {
+  res.json({ message: 'Content Studio AI Backend — Running! 🌹' });
+});
 
 app.post('/join-waitlist', async (req, res) => {
   try {
@@ -151,44 +145,14 @@ app.post('/join-waitlist', async (req, res) => {
     await resend.emails.send({
       from: process.env.RESEND_FROM,
       to: email,
-      subject: 'You\'re on the list! 🌹',
-      html: `<!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"></head>
-        <body style="margin:0;padding:0;background:#FAF8F5;font-family:'Helvetica Neue',Arial,sans-serif;">
-          <div style="max-width:560px;margin:0 auto;padding:48px 24px;">
-            <div style="text-align:center;margin-bottom:36px;">
-              <h1 style="font-family:Georgia,serif;font-size:30px;color:#8B1538;font-weight:400;margin:0;">Content Studio AI</h1>
-            </div>
-            <div style="background:#ffffff;border-radius:20px;padding:40px;border:1px solid #EDE8E3;">
-              <h2 style="font-family:Georgia,serif;font-size:26px;color:#1A1008;font-weight:400;margin:0 0 16px;">You're in, ${name}! 🌹</h2>
-              <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 20px;">
-                You've officially joined the Content Studio AI founding group. We're so glad you're here.
-              </p>
-              <p style="color:#6B6058;font-size:15px;line-height:1.8;margin:0 0 28px;">
-                You'll be among the first to get access when we open the doors. Watch your inbox — we'll be in touch very soon with everything you need to get started.
-              </p>
-              <div style="background:#FAF8F5;border-radius:12px;padding:20px 24px;border-left:3px solid #8B1538;">
-                <p style="color:#8B1538;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 8px;">While you wait</p>
-                <p style="color:#6B6058;font-size:14px;margin:0 0 6px;">✦ Follow along on TikTok for behind the scenes</p>
-                <p style="color:#6B6058;font-size:14px;margin:0;">✦ Tell a creator friend — founding spots are limited</p>
-              </div>
-            </div>
-            <p style="text-align:center;color:#A89E96;font-size:12px;margin-top:24px;">
-              Content Studio AI · <a href="https://contentstudioai.app" style="color:#8B1538;text-decoration:none;">contentstudioai.app</a>
-            </p>
-          </div>
-        </body>
-        </html>`
+      subject: 'Welcome to The Founding Lounge 🌹',
+      html: getFoundingEmail(name)
     });
 
     res.status(201).json({ message: 'You\'re on the list!', data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-app.get('/', (req, res) => {
-  res.json({ message: 'Content Studio AI Backend — Running! 🌹' });
 });
 
 app.post('/signup', async (req, res) => {
@@ -241,15 +205,12 @@ app.post('/forgot-password', async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Email required' });
 
     const { data: user } = await supabase.from('users').select('id, email').eq('email', email).single();
-    if (!user) {
-      return res.json({ message: 'If that email exists, a reset link has been sent.' });
-    }
+    if (!user) return res.json({ message: 'If that email exists, a reset link has been sent.' });
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
     await supabase.from('password_resets').insert([{ email, token, expires_at: expiresAt }]);
-
     const resetUrl = `https://contentstudioai.app/reset-password?token=${token}`;
     await sendPasswordResetEmail(email, resetUrl);
 
@@ -327,18 +288,16 @@ HOW YOU TALK:
 - No markdown formatting (absolutely no # headers, no ** bold **, no asterisks)
 - No long walls of text — you're a conversation, not an essay
 - Get to the point fast — open with something that shows you know THEM
-- Give specific, platform-relevant advice (not generic "post consistently" tips)
+- Give specific, platform-relevant advice
 - End with a clear next step, challenge, or question
-- Use natural paragraph breaks — no bullet point overload
 - Contractions always (you're, I'm, don't, let's)
-- Warm but efficient — leave them wanting to come back tomorrow
 - Occasionally use 🌹 as your signature, but sparingly
 - When analyzing images: be specific, actionable, and encouraging
 
 WHAT YOU KNOW DEEPLY:
-TikTok: Algorithm rewards watch time and completion rate above all. First 3 seconds are everything. Trending sounds boost reach but niche consistency builds loyalty.
-Instagram: Reels get reach, carousels get saves, stories build intimacy. Strong hook on slide 1. Captions matter more than people think.
-YouTube: SEO-driven. Thumbnails and titles decide 80% of success. Retention curves matter.
+TikTok: Algorithm rewards watch time and completion rate above all. First 3 seconds are everything.
+Instagram: Reels get reach, carousels get saves, stories build intimacy.
+YouTube: SEO-driven. Thumbnails and titles decide 80% of success.
 
 GOLDEN RULES:
 Never ignore what you know about the user. Never give generic advice. Never sound like a chatbot. Always feel like Crimson.`;
