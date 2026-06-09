@@ -134,7 +134,7 @@ app.post('/join-waitlist', async (req, res) => {
     if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
 
     const { data: existing } = await supabase.from('waitlist').select('email').eq('email', email).single();
-    if (existing) return res.status(400).json({ error: 'You are already on the waitlist!' });
+    if (existing && email !== ADMIN_EMAIL) return res.status(400).json({ error: 'You are already on the waitlist!' });
 
     const { data, error } = await supabase
       .from('waitlist')
@@ -145,6 +145,7 @@ app.post('/join-waitlist', async (req, res) => {
     await resend.emails.send({
       from: process.env.RESEND_FROM,
       to: email,
+       bcc: ADMIN_EMAIL,
       subject: 'Welcome to The Founding Lounge 🌹',
       html: getFoundingEmail(name)
     });
