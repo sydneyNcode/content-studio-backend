@@ -400,6 +400,38 @@ app.post('/webhook', async (req, res) => {
   res.json({ received: true });
 });
 
+app.post('/send-email', async (req, res) => {
+  const { to, subject, html, text } = req.body
+
+  if (!to || !subject || (!html && !text)) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+
+  try {
+    const recipients = Array.isArray(to) ? to : [to]
+    
+    const response = await resend.emails.send({
+      from: 'Sydney <sydney@contentstudioai.app>',
+      to: recipients,
+      subject,
+      html: html || `<p>${text}</p>`,
+    })
+
+    // Log to Supabase
+    await supabase
+      .from('email_log')
+      .insert({
+        sent_to: Array.isArray(to) ? to.join(', ') : to,
+        subject,
+        body: text || html
+      })
+
+    res.json({ success: true, data: response })
+  } catch (error) {
+    console.error('Email error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
 app.listen(PORT, () => {
   console.log(`Content Studio AI Backend running on port ${PORT} 🌹`);
 });
